@@ -23,6 +23,8 @@ namespace dci::mm::impl
         VirtualSpace();
         ~VirtualSpace();
 
+        static VirtualSpace& single();
+
     public:
         stack::Content* allocStackContent();
         void freeStackContent(stack::Content* stackContent);
@@ -50,6 +52,4 @@ namespace dci::mm::impl
         void* _stacks;
         void(*_panic)(int){};
     };
-
-    extern VirtualSpace virtualSpace;
 }

@@ -25,7 +25,7 @@ namespace dci::mm::impl
     {
         if(_content)
         {
-            virtualSpace.freeStackContent(_content);
+            VirtualSpace::single().freeStackContent(_content);
             _content = nullptr;
         }
     }
@@ -45,7 +45,7 @@ namespace dci::mm::impl
             return;
         }
 
-        _content = virtualSpace.allocStackContent();
+        _content = VirtualSpace::single().allocStackContent();
     }
 
     bool Stack::initialized() const

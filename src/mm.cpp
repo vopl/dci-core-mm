@@ -12,6 +12,6 @@ namespace dci::mm
 {
     void setupPanicHandler(void(* panic)(int))
     {
-        impl::virtualSpace.setupPanicHandler(panic);
+        impl::VirtualSpace::single().setupPanicHandler(panic);
     }
 }

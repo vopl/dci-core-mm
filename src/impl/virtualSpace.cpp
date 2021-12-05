@@ -23,11 +23,11 @@ namespace dci::mm::impl
     {
         bool g_vmAccessHandler(void* addr)
         {
-            return virtualSpace.vmAccessHandler(addr);
+            return VirtualSpace::single().vmAccessHandler(addr);
         }
         void g_vmPanic(int signum)
         {
-            return virtualSpace.vmPanic(signum);
+            return VirtualSpace::single().vmPanic(signum);
         }
     }
 
@@ -38,8 +38,8 @@ namespace dci::mm::impl
 
         if(!_vm)
         {
-            fprintf(stderr, "unable to allocate vm\n");
-            fflush(stderr);
+            std::fprintf(stderr, "unable to allocate vm\n");
+            std::fflush(stderr);
             std::abort();
         }
 
@@ -55,8 +55,8 @@ namespace dci::mm::impl
 
         if(!vm::init(g_vmAccessHandler, g_vmPanic))
         {
-            fprintf(stderr, "unable to initialize vm\n");
-            fflush(stderr);
+            std::fprintf(stderr, "unable to initialize vm\n");
+            std::fflush(stderr);
             std::abort();
         }
     }
@@ -79,6 +79,24 @@ namespace dci::mm::impl
     }
 
     /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
+    namespace
+    {
+        union VirtualSpaceArea
+        {
+            char _area{};
+            VirtualSpace _virtualSpace;
+            VirtualSpaceArea() : _virtualSpace{} {}
+            ~VirtualSpaceArea() {}
+        } g_virtualSpaceArea{};
+    }
+
+    /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
+    VirtualSpace& VirtualSpace::single()
+    {
+        return g_virtualSpaceArea._virtualSpace;
+    }
+
+    /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
     stack::Content* VirtualSpace::allocStackContent()
     {
         bitIndex::Address stackBitAddr = _stacksBitIndex->allocate();
@@ -87,8 +105,8 @@ namespace dci::mm::impl
         {
             dbgWarn("no more stacks available");
 
-            fprintf(stderr, "unable to allocate new stack, no space available\n");
-            fflush(stderr);
+            std::fprintf(stderr, "unable to allocate new stack, no space available\n");
+            std::fflush(stderr);
             std::abort();
         }
 
@@ -145,7 +163,4 @@ namespace dci::mm::impl
             return _panic(signum);
         }
     }
-
-
-    VirtualSpace virtualSpace{};
 }

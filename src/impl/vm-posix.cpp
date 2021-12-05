@@ -30,7 +30,7 @@ namespace dci::mm::impl::vm
     namespace
     {
         /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
-        extern char stateArea[];
+        extern char g_stateArea[];
 
         struct State
         {
@@ -45,7 +45,7 @@ namespace dci::mm::impl::vm
             void * operator new(size_t size)
             {
                 (void)size;
-                return &stateArea;
+                return &g_stateArea;
             }
 
             void operator delete(void* ptr)
@@ -53,14 +53,14 @@ namespace dci::mm::impl::vm
                 (void)ptr;
             }
         };
-        char stateArea[sizeof(State)];
+        char g_stateArea[sizeof(State)];
 
-        State* _state = nullptr;
+        State* g_state = nullptr;
 
         /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
         void segvHandler(int signal_number, siginfo_t* info, void* ctx)
         {
-            State* state = _state;
+            State* state = g_state;
 
             if(state)
             {
@@ -69,8 +69,17 @@ namespace dci::mm::impl::vm
                     return;
                 }
 
-
                 char buf[64];
+                std::sprintf(buf, "%p", info->si_addr);
+                fputs("unhandled SIGSEGV for ", stderr);
+                fputs(buf, stderr);
+                fputs(", do panic\n", stderr);
+                fflush(stderr);
+                if(state->_panic)
+                {
+                    state->_panic(signal_number);
+                }
+
                 std::sprintf(buf, "%p", info->si_addr);
                 fputs("call SIGSEGV default handler for ", stderr);
                 fputs(buf, stderr);
@@ -89,7 +98,7 @@ namespace dci::mm::impl::vm
 
             char buf[64];
             std::sprintf(buf, "%p", info->si_addr);
-            fputs("unable to handle SIGSEGV for 0x", stderr);
+            fputs("unable to handle SIGSEGV for ", stderr);
             fputs(buf, stderr);
             fputs("\n", stderr);
             fflush(stderr);
@@ -97,28 +106,28 @@ namespace dci::mm::impl::vm
         }
     }
 
-
     /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
     bool init(TVmAccessHandler accessHandler, TVmPanic panic)
     {
-        if(_state)
+        if(g_state)
         {
-            fprintf(stderr, "vm::threadInit: secondary call\n");
+            std::fprintf(stderr, "vm::init: secondary call\n");
+            std::fflush(stderr);
             return false;
         }
-        _state = new State;
-        _state->_accessHandler = accessHandler;
-        _state->_panic = panic;
+        g_state = new State;
+        g_state->_accessHandler = accessHandler;
+        g_state->_panic = panic;
 
         ::stack_t altstack;
         memset(&altstack, 0, sizeof(altstack));
-        altstack.ss_size = _state->_altStackSize;
-        altstack.ss_sp = _state->_altStackArea;
+        altstack.ss_size = g_state->_altStackSize;
+        altstack.ss_sp = g_state->_altStackArea;
         altstack.ss_flags = 0;
-        if(sigaltstack(&altstack, &_state->_oldAltStack))
+        if(sigaltstack(&altstack, &g_state->_oldAltStack))
         {
-            delete _state;
-            _state = nullptr;
+            delete g_state;
+            g_state = nullptr;
             perror("sigaltstack");
             return false;
         }
@@ -128,45 +137,46 @@ namespace dci::mm::impl::vm
         sa.sa_sigaction = &segvHandler;
         sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
         sigfillset (&sa.sa_mask);
-        if(sigaction(SIGSEGV, &sa, &_state->_oldAction))
+        if(sigaction(SIGSEGV, &sa, &g_state->_oldAction))
         {
-            delete _state;
-            _state = nullptr;
+            delete g_state;
+            g_state = nullptr;
             perror("sigaction");
             return false;
         }
 
         return true;
-
     }
 
     /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
     bool deinit(TVmAccessHandler accessHandler)
     {
-        if(!_state)
+        if(!g_state)
         {
-            fprintf(stderr, "vm::threadDeinit: already deinited\n");
+            std::fprintf(stderr, "vm::deinit: already deinited\n");
+            std::fflush(stderr);
             return false;
         }
 
-        if(_state->_accessHandler != accessHandler)
+        if(g_state->_accessHandler != accessHandler)
         {
-            fprintf(stderr, "vm::threadDeinit: wrong accessHandler\n");
+            std::fprintf(stderr, "vm::deinit: wrong accessHandler\n");
+            std::fflush(stderr);
             return false;
         }
 
-        if(sigaction(SIGSEGV, &_state->_oldAction, nullptr))
+        if(sigaction(SIGSEGV, &g_state->_oldAction, nullptr))
         {
             perror("sigaction");
         }
 
-        if(sigaltstack(&_state->_oldAltStack, nullptr))
+        if(sigaltstack(&g_state->_oldAltStack, nullptr))
         {
             perror("sigaltstack");
         }
 
-        delete _state;
-        _state = nullptr;
+        delete g_state;
+        g_state = nullptr;
         return true;
     }
 
@@ -211,23 +221,39 @@ namespace dci::mm::impl::vm
     }
 
     /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
-    bool protect(void* addr, std::size_t size, bool access)
+    bool protect(void* addr, std::size_t size, Protection protection)
     {
-        //std::cout<<(access ? "protect" : "unprotect")<<", "<<addr<<", "<<size<<std::endl;
-
-        if(mprotect(addr, size, access ? (PROT_READ|PROT_WRITE) : PROT_NONE))
+        switch(protection)
         {
-            perror("mprotect");
-            return false;
-        }
+        case Protection::none:
+            if(mprotect(addr, size, PROT_NONE))
+            {
+                perror("mprotect");
+                return false;
+            }
 
-        if(madvise(addr, size, access ? MADV_DODUMP : MADV_DONTDUMP))
-        {
-            perror("madvise");
-            return false;
+            if(madvise(addr, size, MADV_DONTDUMP))
+            {
+                perror("madvise");
+                return false;
+            }
+            break;
+
+        case Protection::rw:
+            if(mprotect(addr, size, PROT_READ|PROT_WRITE))
+            {
+                perror("mprotect");
+                return false;
+            }
+
+            if(madvise(addr, size, MADV_DODUMP))
+            {
+                perror("madvise");
+                return false;
+            }
+            break;
         }
 
         return true;
     }
-
 }

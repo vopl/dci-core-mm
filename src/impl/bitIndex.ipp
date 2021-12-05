@@ -22,7 +22,11 @@ namespace dci::mm::impl
     template <std::size_t volume>
     BitIndex<volume>::BitIndex()
     {
-        vm::protect(this, Config::_pageSize, true);
+        if(!vm::protect(this, Config::_pageSize, vm::Protection::rw))
+        {
+            dbgWarn("unable to protect region");
+            std::abort();
+        }
         _header._protectedSize = Config::_pageSize;
         _header._maxAllocatedAddress = 0;
     }
@@ -31,7 +35,11 @@ namespace dci::mm::impl
     template <std::size_t volume>
     BitIndex<volume>::~BitIndex()
     {
-        vm::protect(this, sizeof(*this), false);
+        if(!vm::protect(this, sizeof(*this), vm::Protection::none))
+        {
+            dbgWarn("unable to protect region");
+            std::abort();
+        }
     }
 
     /////////0/////////1/////////2/////////3/////////4/////////5/////////6/////////7
@@ -100,7 +108,7 @@ namespace dci::mm::impl
             if(!vm::protect(
                         utils::sized_cast<char *>(this) + _header._protectedSize,
                         protectedSize - _header._protectedSize,
-                        true))
+                        vm::Protection::rw))
             {
                 dbgWarn("unable to protect region");
                 std::abort();
@@ -112,7 +120,7 @@ namespace dci::mm::impl
             if(!vm::protect(
                         utils::sized_cast<char *>(this) + protectedSize,
                         _header._protectedSize - protectedSize,
-                        false))
+                        vm::Protection::none))
             {
                 dbgWarn("unable to protect region");
                 std::abort();
@@ -120,5 +128,4 @@ namespace dci::mm::impl
             _header._protectedSize = protectedSize;
         }
     }
-
 }

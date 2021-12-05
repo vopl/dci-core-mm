@@ -17,8 +17,13 @@
 #include <algorithm>
 #include <cstdint>
 #include <new>
-#include <alloca.h>
 #include <cstdio>
+
+#if __has_include(<alloca.h>)
+#   include <alloca.h>
+#else
+#   include <malloc.h>
+#endif
 
 namespace dci::mm::impl::stack
 {
@@ -63,7 +68,12 @@ namespace dci::mm::impl::stack
         void compact()
         {
             char* bound = header()._userspaceMapped;
-            bound = reduce(bound, std::min(reinterpret_cast<char*>(this), static_cast<char*>(alloca(1)) + Config::_stackKeepProtectedBytes));
+#ifdef _WIN32
+            char* onStackPointer = static_cast<char*>(_malloca(1));
+#else
+            char* onStackPointer = static_cast<char*>(alloca(1));
+#endif
+            bound = reduce(bound, std::min(reinterpret_cast<char*>(this), onStackPointer + Config::_stackKeepProtectedBytes));
             if(bound != header()._userspaceMapped)
             {
                 header()._userspaceMapped = bound;
@@ -102,18 +112,60 @@ namespace dci::mm::impl::stack
                 return oldBound;
             }
 
-            vm::protect(
+#ifdef _WIN32
+            char* limit = static_cast<char*>(static_cast<void*>(&_userArea)) + sizeof(_userArea);
+            if(oldBound + Config::_pageSize <= limit)
+            {
+                if(!vm::protect(
+                            newBound + Config::_pageSize,
+                            static_cast<std::size_t>(oldBound - newBound),
+                            vm::Protection::none))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+            else
+            {
+                if(!vm::protect(
+                            newBound + Config::_pageSize,
+                            static_cast<std::size_t>(oldBound - newBound - Config::_pageSize),
+                            vm::Protection::none))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+
+            if(!vm::protect(
+                        newBound,
+                        Config::_pageSize,
+                        vm::Protection::guard))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
+
+#else
+            if(!vm::protect(
                         newBound,
                         static_cast<std::size_t>(oldBound - newBound),
-                        false);
+                        vm::Protection::none))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
+#endif
 
             return newBound;
         }
 
         char* extend(char* oldBound, char* newBound)
         {
-            dbgAssert(oldBound >= reinterpret_cast<char *>(this) && oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
-            dbgAssert(newBound >= reinterpret_cast<char *>(this) && newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(oldBound >= reinterpret_cast<char *>(this));
+            dbgAssert(oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(newBound >= reinterpret_cast<char *>(this));
+            dbgAssert(newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
 
             std::uintptr_t inewBound = reinterpret_cast<std::uintptr_t>(newBound);
 
@@ -129,10 +181,29 @@ namespace dci::mm::impl::stack
                 return oldBound;
             }
 
-            vm::protect(
+#ifdef _WIN32
+            char* limit = static_cast<char*>(static_cast<void*>(&_userArea)) + sizeof(_userArea);
+            if(newBound + Config::_pageSize <= limit)
+            {
+                if(!vm::protect(
+                            newBound,
+                            Config::_pageSize,
+                            vm::Protection::guard))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+#endif
+
+            if(!vm::protect(
                         oldBound,
                         static_cast<std::size_t>(newBound - oldBound),
-                        true);
+                        vm::Protection::rw))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
 
             return newBound;
         }
@@ -263,8 +334,10 @@ namespace dci::mm::impl::stack
     private:
         char* reduce(char* oldBound, char* newBound)
         {
-            dbgAssert(oldBound >= reinterpret_cast<char *>(this) && oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
-            dbgAssert(newBound >= reinterpret_cast<char *>(this) && newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(oldBound >= reinterpret_cast<char *>(this));
+            dbgAssert(oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(newBound >= reinterpret_cast<char *>(this));
+            dbgAssert(newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
 
             std::uintptr_t inewBound = reinterpret_cast<std::uintptr_t>(newBound);
 
@@ -280,18 +353,59 @@ namespace dci::mm::impl::stack
                 return oldBound;
             }
 
-            vm::protect(
+#ifdef _WIN32
+            char* limit = static_cast<char*>(static_cast<void*>(&_userArea));
+            if(oldBound - Config::_pageSize >= limit)
+            {
+                if(!vm::protect(
+                            oldBound-Config::_pageSize,
+                            static_cast<std::size_t>(newBound - oldBound),
+                            vm::Protection::none))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+            else
+            {
+                if(!vm::protect(
+                            oldBound,
+                            static_cast<std::size_t>(newBound - oldBound - Config::_pageSize),
+                            vm::Protection::none))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+
+            if(!vm::protect(
+                        newBound-Config::_pageSize,
+                        Config::_pageSize,
+                        vm::Protection::guard))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
+#else
+            if(!vm::protect(
                         oldBound,
                         static_cast<std::size_t>(newBound - oldBound),
-                        false);
+                        vm::Protection::none))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
+#endif
 
             return newBound;
         }
 
         char* extend(char* oldBound, char* newBound)
         {
-            dbgAssert(oldBound >= reinterpret_cast<char *>(this) && oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
-            dbgAssert(newBound >= reinterpret_cast<char *>(this) && newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(oldBound >= reinterpret_cast<char *>(this));
+            dbgAssert(oldBound <= reinterpret_cast<char *>(this) + sizeof(*this));
+            dbgAssert(newBound >= reinterpret_cast<char *>(this));
+            dbgAssert(newBound <= reinterpret_cast<char *>(this) + sizeof(*this));
 
             std::uintptr_t inewBound = reinterpret_cast<std::uintptr_t>(newBound);
 
@@ -307,10 +421,29 @@ namespace dci::mm::impl::stack
                 return oldBound;
             }
 
-            vm::protect(
+#ifdef _WIN32
+            char* limit = static_cast<char*>(static_cast<void*>(&_userArea));
+            if(newBound - Config::_pageSize >= limit)
+            {
+                if(!vm::protect(
+                            newBound - Config::_pageSize,
+                            Config::_pageSize,
+                            vm::Protection::guard))
+                {
+                    dbgWarn("unable to protect region");
+                    std::abort();
+                }
+            }
+#endif
+
+            if(!vm::protect(
                         newBound,
                         static_cast<std::size_t>(oldBound - newBound),
-                        true);
+                        vm::Protection::rw))
+            {
+                dbgWarn("unable to protect region");
+                std::abort();
+            }
 
             return newBound;
         }

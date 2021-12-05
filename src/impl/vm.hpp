@@ -20,5 +20,14 @@ namespace dci::mm::impl::vm
     void* alloc(std::size_t size);
     bool free(void* addr, std::size_t size);
 
-    bool protect(void* addr, std::size_t size, bool access);
+    enum class Protection
+    {
+        none,
+#ifdef _WIN32
+        guard,
+#endif
+        rw,
+    };
+
+    bool protect(void* addr, std::size_t size, Protection protection);
 }
