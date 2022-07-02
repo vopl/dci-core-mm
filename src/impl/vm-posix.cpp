@@ -34,13 +34,13 @@ namespace dci::mm::impl::vm
 
         struct State
         {
-            TVmAccessHandler    _accessHandler {};
-            TVmPanic            _panic {};
+            TVmAccessHandler        _accessHandler {};
+            TVmPanic                _panic {};
 
-            size_t              _altStackSize {SIGSTKSZ};
-            char                _altStackArea[SIGSTKSZ] {};
-            ::stack_t           _oldAltStack {};
-            struct ::sigaction  _oldAction {};
+            static constexpr size_t _altStackSize {16 * 1024 * 1024};
+            char                    _altStackArea[_altStackSize] {};
+            ::stack_t               _oldAltStack {};
+            struct ::sigaction      _oldAction {};
 
             void * operator new(size_t size)
             {
