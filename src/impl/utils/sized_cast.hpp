@@ -7,10 +7,10 @@
 
 #pragma once
 
+#include <type_traits>
+
 namespace dci::mm::impl::utils
 {
-    //TODO: https://en.cppreference.com/w/cpp/numeric/bit_cast
-
     template <class To, class From>
-    constexpr To sized_cast(From from) noexcept;
+    constexpr To sized_cast(const From& from) noexcept requires (sizeof(From) == sizeof(To) && std::is_trivially_copyable_v<From> && std::is_trivially_copyable_v<To>);
 }
