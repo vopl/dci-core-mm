@@ -217,11 +217,11 @@ namespace dci::mm::impl::stack
     private:
         union HeaderArea
         {
-            std::aligned_storage_t<sizeof(Header), alignof(Header)> _space;
+            alignas(Header) std::byte _space[sizeof(Header)];
             Header _header;
         };
 
-        using UserArea = std::aligned_storage_t<Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0), 1>;
+        struct alignas(Config::_pageSize) UserArea {char _space[Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0)];};
 
         HeaderArea  _headerArea;
         UserArea    _userArea;
@@ -269,7 +269,7 @@ namespace dci::mm::impl::stack
         }
 
     private:
-        using GuardArea = std::aligned_storage_t<Config::_pageSize, Config::_pageSize>;
+        struct alignas(Config::_pageSize) GuardArea {char _space[Config::_pageSize];};
         using WithoutGuard = Layout<false, false, true>;
 
         WithoutGuard    _withoutGuard;
@@ -458,11 +458,11 @@ namespace dci::mm::impl::stack
 
         union HeaderArea
         {
-            std::aligned_storage_t<sizeof(Header), alignof(Header)> _space;
+            alignas(Header) std::byte _space[sizeof(Header)];
             Header _header;
         };
 
-        using UserArea = std::aligned_storage_t<Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0), 1>;
+        struct alignas(Config::_pageSize) UserArea {char _space[Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0)];};
 
         UserArea    _userArea;
         HeaderArea  _headerArea;
@@ -510,7 +510,7 @@ namespace dci::mm::impl::stack
         }
 
     private:
-        using GuardArea = std::aligned_storage_t<Config::_pageSize, Config::_pageSize>;
+        struct alignas(Config::_pageSize) GuardArea {char _space[Config::_pageSize];};
         using WithoutGuard = Layout<true, false, true>;
 
         GuardArea       _guardArea;
