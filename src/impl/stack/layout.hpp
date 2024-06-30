@@ -215,13 +215,16 @@ namespace dci::mm::impl::stack
         }
 
     private:
+        static constexpr std::size_t _headerAreaSize = sizeof(Header);
         union HeaderArea
         {
-            alignas(Header) std::byte _space[sizeof(Header)];
+            alignas(Header) std::byte _space[_headerAreaSize];
             Header _header;
         };
+        static_assert(_headerAreaSize == sizeof(HeaderArea));
 
-        struct alignas(Config::_pageSize) UserArea {char _space[Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0)];};
+        static constexpr std::size_t _userAreaSize = Config::_stackPages * Config::_pageSize - _headerAreaSize - (stackReserveGuardPage ? Config::_pageSize : 0);
+        struct UserArea {char _space[_userAreaSize];};
 
         HeaderArea  _headerArea;
         UserArea    _userArea;
@@ -455,14 +458,16 @@ namespace dci::mm::impl::stack
         }
 
     private:
-
+        static constexpr std::size_t _headerAreaSize = sizeof(Header);
         union HeaderArea
         {
-            alignas(Header) std::byte _space[sizeof(Header)];
+            alignas(Header) std::byte _space[_headerAreaSize];
             Header _header;
         };
+        static_assert(_headerAreaSize == sizeof(HeaderArea));
 
-        struct alignas(Config::_pageSize) UserArea {char _space[Config::_stackPages * Config::_pageSize - sizeof(HeaderArea) - (stackReserveGuardPage ? Config::_pageSize : 0)];};
+        static constexpr std::size_t _userAreaSize = Config::_stackPages * Config::_pageSize - _headerAreaSize - (stackReserveGuardPage ? Config::_pageSize : 0);
+        struct UserArea {char _space[_userAreaSize];};
 
         UserArea    _userArea;
         HeaderArea  _headerArea;
